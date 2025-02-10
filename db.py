@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS reminders (
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS user_data (
     user_id INTEGER PRIMARY KEY,
+    user_name TEXT,
     direction TEXT,
     modules TEXT  -- Список модулей через запятую
 )
@@ -36,6 +37,10 @@ CREATE TABLE IF NOT EXISTS lesson_schedule (
 )
 ''')
 conn.commit()
+
+async def get_users():
+    cursor.execute("SELECT user_id, user_name, username, direction FROM user_data")
+    return [(row[0], row[1], row[2], row[3]) for row in cursor.fetchall()]
 
 async def select_reminders(now):
     cursor.execute("SELECT id, user_id, text FROM reminders WHERE time <= ?", (now,))
@@ -54,8 +59,9 @@ async def insert_reminders(user_id, lesson_time, text):
                    (user_id, lesson_time, text))
     conn.commit()
 
-async def replace_user(user_id, direction_key):
-    cursor.execute("REPLACE INTO user_data (user_id, direction) VALUES (?, ?)", (user_id, direction_key))
+async def replace_user(user_id, user_name, username, direction_key):
+    cursor.execute("REPLACE INTO user_data (user_id, user_name, username, direction) VALUES (?, ?, ?, ?)",
+                   (user_id, user_name, username, direction_key))
     conn.commit()
 
 async def update_user(user_id, modules):
@@ -89,6 +95,9 @@ async def remove_duplicates():
         )''')
         await db.commit()
 
+async def delete_scheduled_lessons(now):
+    cursor.execute("DELETE FROM lesson_schedule WHERE lesson_time <= ?", (now,))
+    conn.commit()
 
 async def update_reminders():
     while True:
@@ -109,6 +118,7 @@ async def update_reminders():
                     continue
 
                 selected_modules = user_data[0].split(",")  # Список модулей пользователя
+                print(lessons)
 
                 # Обновляем напоминания для каждого модуля пользователя
                 for module, lesson_time in lessons:

@@ -1,0 +1,5 @@
+aiogram==2.25.1
+python-dotenv==1.0.1
+aiosqlite~=0.21.0
+protobuf~=5.29.3
+google-api-python-client~=2.160.0

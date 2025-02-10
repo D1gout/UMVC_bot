@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from auto_loop import reminder_loop, update_data_in_google_sheet
 from data import MODULES, DIRECTIONS, REQUIRED_MODULES
-from db import select_reminders, delete_reminder, select_user, insert_reminders, replace_user, get_user_modules, \
+from db import select_user, insert_reminders, replace_user, get_user_modules, \
     update_user, get_lesson_schedule, update_reminders, clear_user
 
 load_dotenv()
@@ -25,18 +26,6 @@ REMINDER_BUTTONS = InlineKeyboardMarkup().add(
     InlineKeyboardButton("❌ Не смогу", callback_data="remind_skip")
 )
 
-async def reminder_loop():
-    """Фоновая задача для отправки напоминаний"""
-    while True:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        reminders_to_send = await select_reminders(now)
-
-        for reminder_id, user_id, text in reminders_to_send:
-            await bot.send_message(user_id, f"🔔 Напоминание: {text}", reply_markup=REMINDER_BUTTONS)
-            await delete_reminder(reminder_id)
-
-        await asyncio.sleep(60)  # Проверяем каждую минуту
-
 @dp.callback_query_handler(lambda c: c.data == "finish")
 async def finish_selection(callback_query: types.CallbackQuery):
     """Завершаем выбор модулей и создаём напоминания"""
@@ -47,9 +36,10 @@ async def finish_selection(callback_query: types.CallbackQuery):
         await callback_query.answer("Ошибка: сначала выберите направление!")
         return
 
-    selected_modules = user_info[2].split(",")  # Извлекаем модули из базы
+    selected_modules = []
+    if user_info[2]:
+        selected_modules = user_info[2].split(",")  # Извлекаем модули из базы
     selected_modules += ['first_aid', 'psych']
-    # all_modules = ["Первая Помощь", "Психология"] + [m for m in selected_modules if m in LESSON_SCHEDULE]
 
     lessons = await get_lesson_schedule(selected_modules)
 
@@ -59,11 +49,15 @@ async def finish_selection(callback_query: types.CallbackQuery):
         await insert_reminders(user_id, lesson_dt.strftime("%Y-%m-%d %H:%M"),
                                f"🗓️ {MODULES[module][0]} в {lesson_dt.strftime('%H:%M')}")
 
+    await bot.delete_message(user_id, callback_query.message.message_id)
     await bot.send_message(user_id,
                            f"Класс, будем ждать тебя на занятиях!\n"
                            f"Ты выбрал:\n" + "\n".join(f"✔ {MODULES[m][0]}" for m in selected_modules))
-
-    await bot.send_message(user_id, "Я добавил напоминания о занятиях. ✅")
+    if lessons:
+        await bot.send_message(user_id,
+                               "\n\n".join(f"🗓️ {lesson_time} - "
+                                           f"{MODULES[module][0]}" for lesson_time, module in lessons))
+    await bot.send_message(user_id, "Добавлены напоминания о занятиях. ✅")
 
 
 @dp.callback_query_handler(lambda c: c.data.startswith("remind_"))
@@ -94,7 +88,7 @@ async def start(message: types.Message):
     # Если пользователя нет — предлагаем выбрать направление
     keyboard = InlineKeyboardMarkup()
     for key, name in DIRECTIONS.items():
-        keyboard.add(InlineKeyboardButton(name, callback_data=f"dir_{key}"))
+        keyboard.add(InlineKeyboardButton(name, callback_data=f"dir_{key}_{name}"))
 
     await message.answer("Добро пожаловать в Академию!\nКакое направление вы выбрали?", reply_markup=keyboard)
 
@@ -106,6 +100,7 @@ async def reset_account(callback_query: types.CallbackQuery):
     await clear_user(user_id)
 
     await callback_query.answer("✅ Ваш аккаунт был сброшен. Начните регистрацию заново.")
+    await bot.delete_message(user_id, callback_query.message.message_id)
     await start(callback_query.message)  # Запускаем процесс заново
 
 @dp.callback_query_handler(lambda c: c.data == "cancel_reset")
@@ -117,10 +112,13 @@ async def cancel_reset(callback_query: types.CallbackQuery):
 async def choose_modules(callback_query: types.CallbackQuery):
     """Выбор модулей после направления"""
     user_id = callback_query.from_user.id
+    user_name = callback_query.from_user.full_name
+    user_tg_username = callback_query.from_user.username
     direction_key = callback_query.data.split("_")[1]
+    direction_name = callback_query.data.split("_")[2]
 
     # Сохраняем направление пользователя в БД
-    await replace_user(user_id, direction_key)
+    await replace_user(user_id, user_name, user_tg_username, direction_key)
 
     # Фильтруем доступные модули
     available_modules = [
@@ -135,7 +133,9 @@ async def choose_modules(callback_query: types.CallbackQuery):
 
     keyboard.add(InlineKeyboardButton("✅ Завершить выбор", callback_data="finish"))
 
+    await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
     await bot.send_message(callback_query.from_user.id,
+                           f"Вы выбрали 🚦 {direction_name} 🚦\n\n"
                            f"Отлично, выбери один или несколько модулей.\n"
                            f"Обязательные модули: {', '.join(REQUIRED_MODULES)}",
                            reply_markup=keyboard)
@@ -188,4 +188,5 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     loop.create_task(reminder_loop())
     loop.create_task(update_reminders())
+    loop.create_task(update_data_in_google_sheet())
     executor.start_polling(dp, skip_updates=True)
