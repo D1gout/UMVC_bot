@@ -1,26 +1,7 @@
-# Направления
-DIRECTIONS = {
-    "press": "Пресса",
-    "photo": "Фотографы",
-    "video": "Видеографы",
-    "coord": "Координаторы",
-    "guest": "Я гость"
-}
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Модули с ограничениями
-MODULES = {
-    "interview": ("Интервью и редактура", ["press"]),
-    "speech": ("Работа с речью", ["press"]),
-    "photo": ("Фото", ["photo"]),
-    "promotion": ("Продвижение контента", ["photo", "video"]),
-    "video": ("Видео", ["video"]),
-    "directing": ("Режиссура", ["video"]),
-    "inclusion": ("Инклюзия", ["coord"]),
-    "events": ("Организация мероприятий", ["coord"]),
-    "tech": ("Техники", []),
-    "first_aid": ("Первая Помощь", ["press", "photo", "video", "coord", "guest"]),
-    "psych": ("Психология", ["press", "photo", "video", "coord", "guest"])
-}
-
-# Обязательные модули
-REQUIRED_MODULES = ["Первая Помощь", "Психология"]
+def reminder_buttons(user_id, time):
+    keyboard = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("✅ Приду", callback_data=f"remind_come_{user_id}_{time}"),
+    InlineKeyboardButton("❌ Не смогу", callback_data=f"remind_skip_{user_id}_{time}"))
+    return keyboard

@@ -1,10 +1,9 @@
 # Подключение к базе данных
 import asyncio
 import sqlite3
+from datetime import timedelta, datetime
 
 import aiosqlite
-
-from data import MODULES
 
 conn = sqlite3.connect("umvc.db")
 cursor = conn.cursor()
@@ -26,6 +25,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_name TEXT,
     direction TEXT,
     modules TEXT  -- Список модулей через запятую
+    role TEXT default 'user'
 )
 ''')
 
@@ -36,14 +36,38 @@ CREATE TABLE IF NOT EXISTS lesson_schedule (
     PRIMARY KEY (module_name, lesson_time)
 )
 ''')
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS modules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_code TEXT UNIQUE NOT NULL,
+    module_name TEXT NOT NULL
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS module_restrictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_code TEXT NOT NULL,
+    role TEXT NOT NULL,
+    FOREIGN KEY (module_code) REFERENCES modules (module_code)
+)
+""")
+
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS directions (
+        direction_code TEXT PRIMARY KEY,
+        direction_name TEXT NOT NULL
+    )
+""")
 conn.commit()
 
 async def get_users():
-    cursor.execute("SELECT user_id, user_name, username, direction FROM user_data")
-    return [(row[0], row[1], row[2], row[3]) for row in cursor.fetchall()]
+    cursor.execute("SELECT user_id, user_name, username, direction, modules FROM user_data")
+    return [(row[0], row[1], row[2], row[3], row[4]) for row in cursor.fetchall()]
 
 async def select_reminders(now):
-    cursor.execute("SELECT id, user_id, text FROM reminders WHERE time <= ?", (now,))
+    cursor.execute("SELECT id, user_id, text FROM reminders WHERE time == ?", (now,))
     return cursor.fetchall()
 
 async def delete_reminder(reminder_id):
@@ -55,9 +79,10 @@ async def select_user(user_id):
     return cursor.fetchone()
 
 async def insert_reminders(user_id, lesson_time, text):
-    cursor.execute("INSERT INTO reminders (user_id, time, text) VALUES (?, ?, ?)",
-                   (user_id, lesson_time, text))
-    conn.commit()
+    async with aiosqlite.connect("umvc.db") as db:
+        await db.execute("INSERT INTO reminders (user_id, time, text) VALUES (?, ?, ?)",
+                       (user_id, lesson_time, text))
+        await db.commit()
 
 async def replace_user(user_id, user_name, username, direction_key):
     cursor.execute("REPLACE INTO user_data (user_id, user_name, username, direction) VALUES (?, ?, ?, ?)",
@@ -78,6 +103,21 @@ async def get_lesson_schedule(modules):
                               .format(seq=", ".join(["?"] * len(modules))), modules)
     return cursor.fetchall()
 
+async def get_module_dates_from_db(module_name):
+    async with aiosqlite.connect("umvc.db") as conn:
+        cursor = await conn.cursor()
+
+        # Выполнение асинхронного запроса
+        await cursor.execute("SELECT lesson_time FROM lesson_schedule WHERE module_name = ?", (module_name,))
+        dates = [row[0] for row in await cursor.fetchall()]
+
+        return dates
+
+
+async def update_role(user_id, role):
+    cursor.execute("UPDATE user_data SET role = ? WHERE user_id = ?", (role, user_id))
+    conn.commit()
+
 async def clear_user(user_id):
     async with aiosqlite.connect("umvc.db") as db:
         await db.execute("DELETE FROM user_data WHERE user_id = ?", (user_id,))
@@ -95,13 +135,36 @@ async def remove_duplicates():
         )''')
         await db.commit()
 
-async def delete_scheduled_lessons(now):
-    cursor.execute("DELETE FROM lesson_schedule WHERE lesson_time <= ?", (now,))
-    conn.commit()
+async def get_modules_from_db():
+    async with aiosqlite.connect("umvc.db") as conn_h:
+        cursor_h = await conn_h.cursor()
+
+        await cursor_h.execute("SELECT module_code, module_name FROM modules")
+        modules = await cursor_h.fetchall()
+
+        MODULES = {}
+        for module_code, module_name in modules:
+            await cursor_h.execute("SELECT role FROM module_restrictions WHERE module_code = ?", (module_code,))
+            roles = [row[0] for row in await cursor_h.fetchall()]
+
+            MODULES[module_code] = (module_name, roles)
+
+        return MODULES
+
+async def get_directions_from_db():
+    async with aiosqlite.connect("umvc.db") as conn_h:
+        cursor_h = await conn_h.cursor()
+
+        await cursor_h.execute("SELECT direction_code, direction_name FROM directions")
+        directions = await cursor_h.fetchall()
+
+        DIRECTIONS = {code: name for code, name in directions}
+
+        return DIRECTIONS
 
 async def update_reminders():
     while True:
-        async with aiosqlite.connect("umvc.db") as db:
+        async with (aiosqlite.connect("umvc.db") as db):
             # Получаем актуальное расписание занятий
             cursor = await db.execute("SELECT module_name, lesson_time FROM lesson_schedule")
             lessons = await cursor.fetchall()
@@ -118,27 +181,26 @@ async def update_reminders():
                     continue
 
                 selected_modules = user_data[0].split(",")  # Список модулей пользователя
-                print(lessons)
+                modules = await get_modules_from_db()
 
                 # Обновляем напоминания для каждого модуля пользователя
                 for module, lesson_time in lessons:
                     if module in selected_modules:
-                        reminder_text = f"🗓️ {MODULES[module][0]} в {lesson_time[11:16]}"
+                        reminder_lesson_time = (datetime.strptime(lesson_time, "%Y-%m-%d %H:%M"
+                                                                  ) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+
+                        reminder_text = f"🗓️ {modules[module][0]} в {reminder_lesson_time[11:16]}"
 
                         # Проверяем, существует ли уже такое напоминание
                         cursor = await db.execute(
                             "SELECT COUNT(*) FROM reminders WHERE user_id = ? AND time = ? AND text = ?",
-                            (user_id, lesson_time, reminder_text)
+                            (user_id, reminder_lesson_time, reminder_text)
                         )
                         exists = await cursor.fetchone()
 
                         if exists[0] == 0:  # Если напоминания нет, добавляем его
-                            await db.execute(
-                                "INSERT INTO reminders (user_id, time, text) VALUES (?, ?, ?)",
-                                (user_id, lesson_time, reminder_text)
-                            )
+                            await insert_reminders(user_id, reminder_lesson_time, reminder_text)
 
-            await db.commit()
             await remove_duplicates()
 
         await asyncio.sleep(60 * 10)  # Запуск каждые 10 минут
