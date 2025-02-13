@@ -2,6 +2,7 @@
 import asyncio
 import sqlite3
 from datetime import timedelta, datetime
+from email.policy import default
 
 import aiosqlite
 
@@ -24,7 +25,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_id INTEGER PRIMARY KEY,
     user_name TEXT,
     direction TEXT,
-    modules TEXT  -- Список модулей через запятую
+    modules TEXT,
     role TEXT default 'user'
 )
 ''')
@@ -113,7 +114,6 @@ async def get_module_dates_from_db(module_name):
 
         return dates
 
-
 async def update_role(user_id, role):
     cursor.execute("UPDATE user_data SET role = ? WHERE user_id = ?", (role, user_id))
     conn.commit()
@@ -161,6 +161,50 @@ async def get_directions_from_db():
         DIRECTIONS = {code: name for code, name in directions}
 
         return DIRECTIONS
+
+async def get_role(user_id):
+    async with aiosqlite.connect("umvc.db") as db:
+        cursor = await db.execute("SELECT role FROM user_data WHERE user_id = ?", (user_id,))
+        role = await cursor.fetchone()
+
+        return role[0]
+
+async def add_new_lesson(module_name, lesson_time):
+    async with aiosqlite.connect("umvc.db") as db:
+        cursor = await db.execute("SELECT 1 FROM modules WHERE module_code = ?", (module_name,))
+        module_exists = await cursor.fetchone()
+
+        if not module_exists:
+            return False
+
+        # Добавление нового расписания
+        await db.execute(
+            "INSERT INTO lesson_schedule (module_name, lesson_time) VALUES (?, ?)",
+            (module_name, lesson_time)
+        )
+        await db.commit()
+
+        return True
+
+async def add_new_module(module_code: str, module_name: str, required_roles: list):
+    async with aiosqlite.connect("umvc.db") as db:
+        cursor = await db.cursor()
+        await cursor.execute(
+            "INSERT INTO modules (module_code, module_name) VALUES (?, ?)",
+            (module_code, module_name)
+        )
+        # Сохраняем роли, для которых обязательный модуль
+        for role in required_roles:
+            await cursor.execute(
+                "INSERT INTO module_restrictions (module_code, role) VALUES (?, ?)",
+                (module_code, role)
+            )
+        await db.commit()
+
+async def delete_lesson(lesson_time):
+    async with aiosqlite.connect("umvc.db") as db:
+        await db.execute("DELETE FROM lesson_schedule WHERE lesson_time = ?", (lesson_time,))
+        await db.commit()
 
 async def update_reminders():
     while True:

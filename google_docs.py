@@ -100,7 +100,62 @@ async def add_new_column(index):
             spreadsheetId=SPREADSHEET_ID, body=body
         ).execute()
     except Exception as e:
-        print(f"Ошибка при добавлении столбца: {e}")
+        pass
+
+async def delete_column(time):
+    service = get_sheets_service()
+
+    sheet = service.spreadsheets().values()
+    result = sheet.get(spreadsheetId=SPREADSHEET_ID, range="Отметки!A:Z").execute()
+    values = result.get("values", [])
+
+    column_index = None
+    for row_index, row in enumerate(values[1]):
+        if row == time:
+            column_index = row_index
+
+    title = None
+    title_letter = None
+    if values[0][column_index] != '':
+        title = values[0][column_index]
+        title_letter = string.ascii_uppercase[column_index]
+
+    requests = [
+        {
+            "deleteDimension": {
+                "range": {
+                    "sheetId": 1764031813,
+                    "dimension": "COLUMNS",
+                    "startIndex": column_index,
+                    "endIndex": column_index + 1
+                }
+            }
+        }
+    ]
+
+    body = {"requests": requests}
+
+    try:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body=body
+        ).execute()
+
+        if title and title_letter:
+            update_range = f"Отметки!{title_letter}1"
+
+            body = {
+                'values': [[title]]
+            }
+
+            service.spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=update_range,
+                valueInputOption="RAW",
+                body=body
+            ).execute()
+    except Exception as e:
+        pass
 
 
 def update_in_google_sheet(data, range_to_update):
@@ -150,8 +205,6 @@ def find_and_update_in_google_sheet(user_id, answer, date_to_find, range_to_upda
     column_letter = string.ascii_uppercase[column_index]
 
     update_range = f"Отметки!{column_letter}{row_index}"
-    print(update_range)
-
 
     body = {
         "values": [[answer]]
@@ -208,10 +261,11 @@ async def add_missing_dates_to_sheet(module_name, new_dates, len_existing_dates,
             insert_index = row_index
             break
 
-    if len_existing_dates != 0:
-        for i in range(update_index):
-            await add_new_column(len_existing_dates + 1 + i)
-            await asyncio.sleep(5)
+    if len_existing_dates > 0:
+        for i in range(len(update_index)):
+            if not len(values[1]) == (insert_index + len_existing_dates + i) + 1:
+                await add_new_column(insert_index + len_existing_dates + i)
+                await asyncio.sleep(5)
 
     if insert_index is None:
         if values[1]:
@@ -237,16 +291,28 @@ async def add_missing_dates_to_sheet(module_name, new_dates, len_existing_dates,
 
     await auto_merger(0, 1, insert_index, insert_index + len(new_dates))
 
-    update_range = f"Отметки!{column_letter}{2}:{column_letter_last}2"
+    if len_existing_dates < 0:
+        update_range = f"Отметки!{column_letter}{2}:{column_letter_last}2"
 
-    body = {"values": [new_dates]}
+        body = {"values": [new_dates]}
 
-    service.spreadsheets().values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=update_range,
-        valueInputOption="RAW",
-        body=body
-    ).execute()
+        service.spreadsheets().values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=update_range,
+            valueInputOption="RAW",
+            body=body
+        ).execute()
+    else:
+        update_range = f"Отметки!{column_letter_last}2"
+
+        body = {"values": [update_index]}
+
+        service.spreadsheets().values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=update_range,
+            valueInputOption="RAW",
+            body=body
+        ).execute()
 
 
 async def sync_module_dates():
@@ -260,8 +326,6 @@ async def sync_module_dates():
 
             if new_dates:
                 await add_missing_dates_to_sheet(module_name,
-                                                 db_dates, len(sheet_dates) - len(new_dates), len(new_dates))
-
-            print(f"Синхронизированы даты для модуля {module_name}")
+                                                 db_dates, len(sheet_dates) - len(new_dates), new_dates)
 
         await asyncio.sleep(60 * 30)

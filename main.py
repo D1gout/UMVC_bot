@@ -1,17 +1,20 @@
 import os
 import logging
 import asyncio
+import re
 from datetime import datetime, timedelta
+from sys import modules
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from auto_loop import reminder_loop, update_data_in_google_sheet
+from data import selected_roles
 from db import select_user, insert_reminders, replace_user, get_user_modules, \
     update_user, get_lesson_schedule, update_reminders, clear_user, update_role, get_modules_from_db, \
-    get_directions_from_db
-from google_docs import cmd_reminders_google_sheet, sync_module_dates
+    get_directions_from_db, add_new_lesson, get_role, add_new_module, delete_lesson
+from google_docs import cmd_reminders_google_sheet, sync_module_dates, delete_column
 
 load_dotenv()
 
@@ -198,6 +201,59 @@ async def select_module(callback_query: types.CallbackQuery):
                                         callback_query.message.message_id,
                                         reply_markup=keyboard)
 
+
+@dp.callback_query_handler(lambda c: c.data.startswith("role_select_"))
+async def handle_role_selection(callback_query: types.CallbackQuery):
+    role_key = callback_query.data.split("_")[2]
+
+    if role_key in selected_roles['roles']:
+        selected_roles['roles'].remove(role_key)
+    else:
+        selected_roles['roles'].add(role_key)
+
+    directions = await get_directions_from_db()
+
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    for key, name in directions.items():
+        is_selected = "✅" if key in selected_roles['roles'] else ""
+        keyboard.add(InlineKeyboardButton(f"{is_selected} {name}", callback_data=f"role_select_{key}"))
+
+    keyboard.add(InlineKeyboardButton("✅ Завершить выбор",
+                                      callback_data=f"finish_role"))
+    await callback_query.answer("✅")
+    await bot.edit_message_reply_markup(callback_query.from_user.id,
+                                        callback_query.message.message_id,
+                                        reply_markup=keyboard)
+
+@dp.callback_query_handler(lambda c: c.data == "finish_role")
+async def finish_selection(callback_query: types.CallbackQuery):
+    await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
+    await add_new_module(selected_roles['module_code'], selected_roles['module_name'], selected_roles['roles'])
+    await callback_query.answer("Роли выбраны!")
+
+@dp.callback_query_handler(lambda c: c.data.startswith('delete_lesson_'))
+async def handle_delete_lesson(callback_query: types.CallbackQuery):
+    lesson_time = callback_query.data.split("_")[3]
+    key = callback_query.data.split("_")[2]
+
+    await delete_lesson(lesson_time)
+    await delete_column(lesson_time)
+
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    lessons = await get_lesson_schedule([key])
+    if lessons:
+
+        for lesson in lessons:
+            if lesson[0] != lesson_time:
+                keyboard.add(InlineKeyboardButton(lesson[0], callback_data=f"delete_lesson_{key}_{lesson[0]}"))
+
+    await bot.edit_message_reply_markup(
+        callback_query.from_user.id,
+        callback_query.message.message_id,
+        reply_markup=keyboard
+    )
+
+
 @dp.message_handler(commands=['admin'])
 async def admin_command(message: types.Message):
     user_id = message.from_user.id
@@ -211,6 +267,88 @@ async def admin_command(message: types.Message):
     await bot.delete_message(message.from_user.id, message.message_id)
 
 
+@dp.message_handler(commands=['lesson'])
+async def lesson_command(message: types.Message):
+    user_id = message.from_user.id
+
+    if await get_role(user_id) != 'admin':
+        return await bot.delete_message(message.from_user.id, message.message_id)
+
+    msg_text = message.text.strip().replace("/lesson", "").strip()
+
+    pattern = r"^(\w+)\s(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2})$"
+    match = re.match(pattern, msg_text)
+    if not match:
+        modules = await get_modules_from_db()
+        module_list = "\n".join([f"{key} - {name[0]}" for key, name in modules.items()])
+        await message.reply(f"Неверный формат. Используйте: /lesson <module> YYYY-MM-DD HH:MM\n\n"
+                            f"Доступные модули:\n{module_list}")
+        return
+
+    module_name, date, time = match.groups()
+    lesson_time = f"{date} {time}"
+
+    if await add_new_lesson(module_name, lesson_time):
+        await message.reply(f"Расписание для модуля '{module_name}' на {lesson_time} добавлено.")
+    else:
+        await message.reply(f"Модуль '{module_name}' не найден.")
+
+
+@dp.message_handler(commands=['delete_lesson'])
+async def delete_lesson_command(message: types.Message):
+    user_id = message.from_user.id
+
+    if await get_role(user_id) != 'admin':
+        return await bot.delete_message(message.from_user.id, message.message_id)
+
+    # Получаем список всех занятий
+    modules_list = await get_modules_from_db()
+
+    for key, name in modules_list.items():
+        lessons = await get_lesson_schedule([key])
+        print(key)
+        if lessons:
+            print(lessons)
+
+            keyboard = InlineKeyboardMarkup(row_width=1)
+            for lesson in lessons:
+                keyboard.add(InlineKeyboardButton(lesson[0], callback_data=f"delete_lesson_{key}_{lesson[0]}"))
+
+            await bot.send_message(user_id, name[0], reply_markup=keyboard)
+
+
+
+@dp.message_handler(commands=['module'])
+async def add_module_command(message: types.Message):
+    user_id = message.from_user.id
+
+    if await get_role(user_id) != 'admin':
+        return await bot.delete_message(message.from_user.id, message.message_id)
+
+    params = message.text.split(" ")
+
+    if len(params) != 3:
+        await message.reply("Неверный формат. Используйте: /module <module_code> <module_name>")
+        return
+
+    module_code = params[1]
+    module_name = params[2]
+
+    directions = await get_directions_from_db()
+
+    selected_roles['module_name'] = module_name
+    selected_roles['module_code'] = module_code
+
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    for key, name in directions.items():
+        keyboard.add(InlineKeyboardButton(name, callback_data=f"role_select_{key}"))
+
+    keyboard.add(InlineKeyboardButton("✅ Завершить выбор",
+                                      callback_data=f"finish_role"))
+
+    await bot.send_message(message.from_user.id,
+                           f"Модуль '{module_name}' добавлен! Выберите роли, для которых он будет обязательным.",
+                           reply_markup=keyboard)
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
