@@ -104,8 +104,13 @@ async def get_user_modules(user_id):
     return result[0].split(",") if result and result[0] else []
 
 async def get_lesson_schedule(modules):
-    cursor.execute("SELECT lesson_time, module_name FROM lesson_schedule WHERE module_name IN ({seq})"
-                              .format(seq=", ".join(["?"] * len(modules))), modules)
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute(
+        "SELECT lesson_time, module_name FROM lesson_schedule "
+        "WHERE module_name IN ({seq}) AND lesson_time > ?"
+        .format(seq=", ".join(["?"] * len(modules))),
+        modules + [current_time]
+    )
     return cursor.fetchall()
 
 async def get_module_dates_from_db(module_name):
@@ -214,8 +219,11 @@ async def update_reminders():
     while True:
         async with (aiosqlite.connect("umvc.db") as db):
             # Получаем актуальное расписание занятий
-            cursor = await db.execute("SELECT module_name, lesson_time FROM lesson_schedule")
-            lessons = await cursor.fetchall()
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor = await db.execute("SELECT module_name, lesson_time FROM lesson_schedule WHERE lesson_time > ?",
+                             (current_time,))
+
+            lessons = await cursor.fetchall()  # Получаем все строки
 
             # Получаем всех пользователей, у которых есть напоминания
             cursor = await db.execute("SELECT user_id FROM user_data WHERE modules IS NOT NULL AND modules != ''")
@@ -237,7 +245,7 @@ async def update_reminders():
                         reminder_lesson_time = (datetime.strptime(lesson_time, "%Y-%m-%d %H:%M"
                                                                   ) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
 
-                        reminder_text = f"🗓️ {modules[module][0]} в {reminder_lesson_time[11:16]}"
+                        reminder_text = f"🗓️ {modules[module][0]} в {lesson_time[11:16]}"
 
                         # Проверяем, существует ли уже такое напоминание
                         cursor = await db.execute(
