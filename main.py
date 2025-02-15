@@ -3,17 +3,20 @@ import logging
 import asyncio
 import re
 from datetime import datetime, timedelta
-from sys import modules
 
+from aiogram.dispatcher import FSMContext
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+
 
 from auto_loop import reminder_loop, update_data_in_google_sheet
 from data import selected_roles
 from db import select_user, insert_reminders, replace_user, get_user_modules, \
     update_user, get_lesson_schedule, update_reminders, clear_user, update_role, get_modules_from_db, \
-    get_directions_from_db, add_new_lesson, get_role, add_new_module, delete_lesson
+    get_directions_from_db, add_new_lesson, get_role, add_new_module, delete_lesson, add_user_name
 from google_docs import cmd_reminders_google_sheet, sync_module_dates, delete_column
 
 load_dotenv()
@@ -21,7 +24,27 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=os.getenv("TOKEN"))
-dp = Dispatcher(bot)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
+
+class UserState(StatesGroup):
+    waiting_for_full_name = State()
+
+async def get_lesson_and_modules(user_id, message):
+    user_info = await select_user(user_id)
+
+    if user_info is None:
+        await message.answer("Ошибка: сначала выберите направление!")
+        return None, None, None
+
+    selected_modules = []
+    if user_info[2]:
+        selected_modules = user_info[2].split(",")  # Извлекаем модули из базы
+
+    lessons = await get_lesson_schedule(selected_modules)
+    modules = await get_modules_from_db()
+
+    return lessons, modules, selected_modules
 
 
 @dp.callback_query_handler(lambda c: c.data == "finish")
@@ -29,34 +52,39 @@ async def finish_selection(callback_query: types.CallbackQuery):
     """Завершаем выбор модулей и создаём напоминания"""
     user_id = callback_query.from_user.id
 
-    user_info = await select_user(user_id)
-    if user_info is None:
-        await callback_query.answer("Ошибка: сначала выберите направление!")
-        return
-
-    selected_modules = []
-    if user_info[2]:
-        selected_modules = user_info[2].split(",")  # Извлекаем модули из базы
-
-    lessons = await get_lesson_schedule(selected_modules)
-
-    modules = await get_modules_from_db()
-
-    # Создаём напоминания
-    for lesson_time, module in lessons:
-        lesson_dt = datetime.strptime(lesson_time, "%Y-%m-%d %H:%M") - timedelta(hours=1)
-        await insert_reminders(user_id, lesson_dt.strftime("%Y-%m-%d %H:%M"),
-                               f"🗓️ {modules[module][0]} в {lesson_dt.strftime('%H:%M')}")
 
     await bot.delete_message(user_id, callback_query.message.message_id)
-    await bot.send_message(user_id,
-                           f"Класс, будем ждать тебя на занятиях!\n"
-                           f"Ты выбрал:\n" + "\n".join(f"✔ {modules[m][0]}" for m in selected_modules))
-    if lessons:
+    await bot.send_message(callback_query.from_user.id, "Введите, пожалуйста, ваше ФИО:")
+    await UserState.waiting_for_full_name.set()
+
+
+@dp.message_handler(state=UserState.waiting_for_full_name)
+async def process_full_name(message: types.Message, state: FSMContext):
+    """Обработка ввода ФИО пользователя"""
+    user_id = message.from_user.id
+    full_name = message.text
+
+    await add_user_name(message.from_user.id, full_name)
+
+    await state.finish()
+    await message.answer(f"Спасибо, {full_name}! Регистрация завершена.")
+
+    lessons, modules, selected_modules = await get_lesson_and_modules(user_id, message)
+
+    if lessons and modules and selected_modules:
+        for lesson_time, module in lessons:
+            lesson_dt = datetime.strptime(lesson_time, "%Y-%m-%d %H:%M") - timedelta(hours=1)
+            await insert_reminders(user_id, lesson_dt.strftime("%Y-%m-%d %H:%M"),
+                                   f"🗓️ {modules[module][0]} в {lesson_dt.strftime('%H:%M')}")
+
         await bot.send_message(user_id,
-                               "\n\n".join(f"🗓️ {lesson_time} - "
-                                           f"{modules[module][0]}" for lesson_time, module in lessons))
-    await bot.send_message(user_id, "Добавлены напоминания о занятиях. ✅")
+                               f"Будем ждать тебя на занятиях!\n"
+                               f"Ты выбрал:\n" + "\n".join(f"✔ {modules[m][0]}" for m in selected_modules))
+        if lessons:
+            await bot.send_message(user_id,
+                                   "\n\n".join(f"🗓️ {lesson_time} - "
+                                               f"{modules[module][0]}" for lesson_time, module in lessons))
+        await bot.send_message(user_id, "Добавлены напоминания о занятиях. ✅")
 
 
 @dp.callback_query_handler(lambda c: c.data.startswith("remind_"))
@@ -126,7 +154,7 @@ async def choose_modules(callback_query: types.CallbackQuery):
     direction_name = callback_query.data.split("_")[2]
 
     # Сохраняем направление пользователя в БД
-    await replace_user(user_id, user_name, user_tg_username, direction_key)
+    await replace_user(user_id, user_tg_username, direction_key)
 
     modules = await get_modules_from_db()
     # Фильтруем доступные модули
@@ -306,9 +334,7 @@ async def delete_lesson_command(message: types.Message):
 
     for key, name in modules_list.items():
         lessons = await get_lesson_schedule([key])
-        print(key)
         if lessons:
-            print(lessons)
 
             keyboard = InlineKeyboardMarkup(row_width=1)
             for lesson in lessons:
@@ -349,6 +375,17 @@ async def add_module_command(message: types.Message):
     await bot.send_message(message.from_user.id,
                            f"Модуль '{module_name}' добавлен! Выберите роли, для которых он будет обязательным.",
                            reply_markup=keyboard)
+
+@dp.message_handler(commands=['lessons'])
+async def get_lesson_schedule_message(message: types.Message):
+    user_id = message.from_user.id
+
+    lessons, modules, selected_modules = await get_lesson_and_modules(user_id, message)
+
+    if lessons and modules:
+        await bot.send_message(user_id,
+                               "\n\n".join(f"🗓️ {lesson_time} - "
+                                           f"{modules[module][0]}" for lesson_time, module in lessons))
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()

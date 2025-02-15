@@ -85,9 +85,13 @@ async def insert_reminders(user_id, lesson_time, text):
                        (user_id, lesson_time, text))
         await db.commit()
 
-async def replace_user(user_id, user_name, username, direction_key):
-    cursor.execute("REPLACE INTO user_data (user_id, user_name, username, direction) VALUES (?, ?, ?, ?)",
-                   (user_id, user_name, username, direction_key))
+async def replace_user(user_id, username, direction_key):
+    cursor.execute("REPLACE INTO user_data (user_id, username, direction) VALUES (?, ?, ?)",
+                   (user_id, username, direction_key))
+    conn.commit()
+
+async def add_user_name(user_id, user_name):
+    cursor.execute("UPDATE user_data SET user_name = ? WHERE user_id = ?", (user_name, user_id))
     conn.commit()
 
 async def update_user(user_id, modules):
