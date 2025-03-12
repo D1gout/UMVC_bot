@@ -176,7 +176,7 @@ async def choose_modules(callback_query: types.CallbackQuery):
     for key, name in available_modules:
         keyboard.add(InlineKeyboardButton(name, callback_data=f"mod_{key}"))
 
-    keyboard.add(InlineKeyboardButton("✅ Завершить выбор", callback_data="finish"))
+    keyboard.add(InlineKeyboardButton("➕ Завершить выбор", callback_data="finish"))
 
     await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
     await bot.send_message(callback_query.from_user.id,
@@ -223,7 +223,7 @@ async def select_module(callback_query: types.CallbackQuery):
         is_selected = "✅" if key in selected_modules else ""
         keyboard.add(InlineKeyboardButton(f"{is_selected} {name}", callback_data=f"mod_{key}"))
 
-    keyboard.add(InlineKeyboardButton("✅ Завершить выбор", callback_data="finish"))
+    keyboard.add(InlineKeyboardButton("➕ Завершить выбор", callback_data="finish"))
 
     await bot.edit_message_reply_markup(callback_query.from_user.id,
                                         callback_query.message.message_id,
@@ -246,7 +246,7 @@ async def handle_role_selection(callback_query: types.CallbackQuery):
         is_selected = "✅" if key in selected_roles['roles'] else ""
         keyboard.add(InlineKeyboardButton(f"{is_selected} {name}", callback_data=f"role_select_{key}"))
 
-    keyboard.add(InlineKeyboardButton("✅ Завершить выбор",
+    keyboard.add(InlineKeyboardButton("➕ Завершить выбор",
                                       callback_data=f"finish_role"))
     await callback_query.answer("✅")
     await bot.edit_message_reply_markup(callback_query.from_user.id,
@@ -369,7 +369,7 @@ async def add_module_command(message: types.Message):
     for key, name in directions.items():
         keyboard.add(InlineKeyboardButton(name, callback_data=f"role_select_{key}"))
 
-    keyboard.add(InlineKeyboardButton("✅ Завершить выбор",
+    keyboard.add(InlineKeyboardButton("➕ Завершить выбор",
                                       callback_data=f"finish_role"))
 
     await bot.send_message(message.from_user.id,
