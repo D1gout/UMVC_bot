@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from data import reminder_buttons
 from google_docs import cmd_user_google_sheet
 
-from db import select_reminders, delete_reminder, get_users, get_modules_from_db, get_directions_from_db
+from db import select_reminders, delete_reminder, get_users, get_modules_from_db, get_directions_from_db, print_user
 
 
 async def reminder_loop():
@@ -31,11 +31,13 @@ async def update_data_in_google_sheet():
         modules = await get_modules_from_db()
 
         for i in range(len(user_data)):
-            await cmd_user_google_sheet([user_data[i][0]], f"B{2+i}")
-            await cmd_user_google_sheet([user_data[i][1]], f"C{2+i}")
-            await cmd_user_google_sheet([f'https://t.me/{user_data[i][2]}'], f"D{2 + i}")
-            await cmd_user_google_sheet([directions[user_data[i][3]]], f"E{2+i}")
-            await cmd_user_google_sheet([", ".join([modules[module][0] for module in user_data[i][4].split(",")])], f"F{2+i}")
+            if user_data[i][5] == 0:
+                table_num = await cmd_user_google_sheet([user_data[i][0]], f"B")
+                await cmd_user_google_sheet([user_data[i][1]], f"C{table_num}")
+                await cmd_user_google_sheet([f'https://t.me/{user_data[i][2]}'], f"D{table_num}")
+                await cmd_user_google_sheet([directions[user_data[i][3]]], f"E{table_num}")
+                await cmd_user_google_sheet([", ".join([modules[module][0] for module in user_data[i][4].split(",")])], f"F{table_num}")
 
+                await print_user(user_data[i][0])
 
         await asyncio.sleep(60 * 60)

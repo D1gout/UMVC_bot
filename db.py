@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_name TEXT,
     direction TEXT,
     modules TEXT,
-    role TEXT default 'user'
+    role TEXT default 'user',
+    printed INTEGER NOT NULL DEFAULT 0
 )
 ''')
 
@@ -42,7 +43,8 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS modules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     module_code TEXT UNIQUE NOT NULL,
-    module_name TEXT NOT NULL
+    module_name TEXT NOT NULL,
+    description TEXT NULL
 )
 """)
 
@@ -64,8 +66,15 @@ cursor.execute("""
 conn.commit()
 
 async def get_users():
-    cursor.execute("SELECT user_id, user_name, username, direction, modules FROM user_data")
-    return [(row[0], row[1], row[2], row[3], row[4]) for row in cursor.fetchall()]
+    cursor.execute("SELECT user_id, user_name, username, direction, modules, printed FROM user_data")
+    return [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in cursor.fetchall()]
+
+async def print_user(user_id):
+    async with aiosqlite.connect("umvc.db") as db:
+        await db.execute("UPDATE user_data SET printed = ? WHERE user_id = ?",
+                       (1, user_id))
+        await db.commit()
+
 
 async def select_reminders(now):
     cursor.execute("SELECT id, user_id, text FROM reminders WHERE time == ?", (now,))
@@ -159,6 +168,14 @@ async def get_modules_from_db():
             MODULES[module_code] = (module_name, roles)
 
         return MODULES
+
+async def get_modules_description():
+    async with aiosqlite.connect("umvc.db") as conn_h:
+        cursor_h = await conn_h.cursor()
+        await cursor_h.execute("SELECT module_name, description FROM modules")
+
+        modules = await cursor_h.fetchall()
+        return [f"{module_name} - {description}" for module_name, description in modules]
 
 async def get_directions_from_db():
     async with aiosqlite.connect("umvc.db") as conn_h:

@@ -16,7 +16,8 @@ from auto_loop import reminder_loop, update_data_in_google_sheet
 from data import selected_roles
 from db import select_user, insert_reminders, replace_user, get_user_modules, \
     update_user, get_lesson_schedule, update_reminders, clear_user, update_role, get_modules_from_db, \
-    get_directions_from_db, add_new_lesson, get_role, add_new_module, delete_lesson, add_user_name
+    get_directions_from_db, add_new_lesson, get_role, add_new_module, delete_lesson, add_user_name, \
+    get_modules_description
 from google_docs import cmd_reminders_google_sheet, sync_module_dates, delete_column
 
 load_dotenv()
@@ -155,6 +156,10 @@ async def choose_modules(callback_query: types.CallbackQuery):
 
     # Сохраняем направление пользователя в БД
     await replace_user(user_id, user_tg_username, direction_key)
+
+    modules_list = await get_modules_description()
+    for module in modules_list:
+        await bot.send_message(callback_query.from_user.id, module)
 
     modules = await get_modules_from_db()
     # Фильтруем доступные модули

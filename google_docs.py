@@ -161,6 +161,27 @@ async def delete_column(time):
 def update_in_google_sheet(data, range_to_update):
     service = get_sheets_service()
 
+    table_name, table_letter = range_to_update.split('!')
+
+    sheet = service.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range="B2:B"
+    ).execute()
+
+    values_old = sheet.get("values", [])
+
+    table_num = 0
+
+    if table_letter == "B":
+        for i in range(len(values_old)):
+            if str(values_old[i][0]) == str(data[0]):
+                range_to_update = f"{table_name}!B{i+2}"
+                table_num = i+2
+                break
+        else:
+            range_to_update = f"{table_name}!B{len(values_old) + 2}"
+            table_num = len(values_old) + 2
+
     values = []
     for user in data:
         values.append([str(user)])
@@ -175,6 +196,8 @@ def update_in_google_sheet(data, range_to_update):
         valueInputOption="RAW",
         body=body
     ).execute()
+
+    return table_num
 
 def find_and_update_in_google_sheet(user_id, answer, date_to_find, range_to_update):
     service = get_sheets_service()
@@ -219,7 +242,7 @@ def find_and_update_in_google_sheet(user_id, answer, date_to_find, range_to_upda
 
 async def cmd_user_google_sheet(data: list, range_to_update: str):
     range_to_update = "Пользователи!" + range_to_update
-    await asyncio.to_thread(update_in_google_sheet, data, range_to_update)
+    return await asyncio.to_thread(update_in_google_sheet, data, range_to_update)
 
 async def cmd_reminders_google_sheet(user_id: list, answer: str, date, range_to_update: str):
     range_to_update = "Отметки!" + range_to_update
