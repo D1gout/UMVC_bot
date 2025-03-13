@@ -28,6 +28,8 @@ bot = Bot(token=os.getenv("TOKEN"))
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
+user_messages = {}
+
 class UserState(StatesGroup):
     waiting_for_full_name = State()
 
@@ -53,10 +55,17 @@ async def finish_selection(callback_query: types.CallbackQuery):
     """Завершаем выбор модулей и создаём напоминания"""
     user_id = callback_query.from_user.id
 
+    for message_id in user_messages.get(user_id, []):
+        try:
+            await bot.delete_message(user_id, message_id)
+        except Exception:
+            pass
+
+    user_messages.pop(user_id, None)
 
     await bot.delete_message(user_id, callback_query.message.message_id)
     await bot.send_message(callback_query.from_user.id, "📝 Для регистрации укажи, пожалуйста, свои ФИО.\n"
-                                                        "Эта информация нужна, чтобы выдать тебе персональный сертификат по итогам обучения."
+                                                        "Эта информация нужна, чтобы выдать тебе персональный сертификат по итогам обучения.\n\n"
                                                         "Как отправить?\n"
                                                         "Просто напиши свои ФИО в чат в формате:\n"
                                                         "«Иванов Иван Иванович»")
@@ -154,10 +163,12 @@ async def reset_account(callback_query: types.CallbackQuery):
     await bot.delete_message(user_id, callback_query.message.message_id)
     await start(callback_query.message)  # Запускаем процесс заново
 
+
 @dp.callback_query_handler(lambda c: c.data == "cancel_reset")
 async def cancel_reset(callback_query: types.CallbackQuery):
     """Отмена пересоздания аккаунта"""
     await callback_query.answer("Оставляем всё как есть! 🎉")
+
 
 @dp.callback_query_handler(lambda c: c.data.startswith("dir_"))
 async def choose_modules(callback_query: types.CallbackQuery):
@@ -197,7 +208,8 @@ async def show_modules(callback_query: types.CallbackQuery):
 
     modules_list = await get_modules_description()
     for module in modules_list:
-        await bot.send_message(user_id, module)
+        msg = await bot.send_message(user_id, module)
+        user_messages.setdefault(user_id, []).append(msg.message_id)
 
     modules = await get_modules_from_db()
 
