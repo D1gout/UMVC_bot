@@ -369,6 +369,7 @@ async def module_info_command(message: types.Message):
     modules_list = await get_modules_description()
     user_messages[user_id] = []  # Очищаем перед новым списком
 
+    user_messages[user_id].append(message.message_id)
     for i, module in enumerate(modules_list):
         if i == len(modules_list) - 1:  # Для последнего модуля добавляем кнопку
             keyboard = InlineKeyboardMarkup().add(
