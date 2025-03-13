@@ -418,8 +418,8 @@ async def get_lesson_schedule_message(message: types.Message):
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    # loop.create_task(reminder_loop())
-    # loop.create_task(update_reminders())
-    # loop.create_task(update_data_in_google_sheet())
-    # loop.create_task(sync_module_dates())
+    loop.create_task(reminder_loop())
+    loop.create_task(update_reminders())
+    loop.create_task(update_data_in_google_sheet())
+    loop.create_task(sync_module_dates())
     executor.start_polling(dp, skip_updates=True)
