@@ -19,7 +19,7 @@ def get_sheets_service():
     )
     return build('sheets', 'v4', credentials=credentials)
 
-async def get_column_letter(index):
+def get_column_letter(index):
     """Преобразует индекс в буквенное представление (A-Z, AA, AB...)"""
     result = ""
     while index >= 0:
