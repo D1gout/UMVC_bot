@@ -202,7 +202,6 @@ def update_in_google_sheet(data, range_to_update):
 def find_and_update_in_google_sheet(user_id, answer, date_to_find, range_to_update):
     service = get_sheets_service()
 
-    # Получаем все данные из диапазона A:Z (или другого нужного диапазона)
     sheet = service.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID,
         range=range_to_update
@@ -274,7 +273,7 @@ async def add_missing_dates_to_sheet(module_name, new_dates, len_existing_dates,
     service = get_sheets_service()
 
     sheet = service.spreadsheets().values()
-    result = sheet.get(spreadsheetId=SPREADSHEET_ID, range="Отметки!A:Z").execute()
+    result = sheet.get(spreadsheetId=SPREADSHEET_ID, range="Отметки!A:AZ").execute()
     values = result.get("values", [])
 
     insert_index = None
