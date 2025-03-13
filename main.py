@@ -55,7 +55,11 @@ async def finish_selection(callback_query: types.CallbackQuery):
 
 
     await bot.delete_message(user_id, callback_query.message.message_id)
-    await bot.send_message(callback_query.from_user.id, "Введите, пожалуйста, ваше ФИО:")
+    await bot.send_message(callback_query.from_user.id, "📝 Для регистрации укажи, пожалуйста, свои ФИО.\n"
+                                                        "Эта информация нужна, чтобы выдать тебе персональный сертификат по итогам обучения."
+                                                        "Как отправить?\n"
+                                                        "Просто напиши свои ФИО в чат в формате:\n"
+                                                        "«Иванов Иван Иванович»")
     await UserState.waiting_for_full_name.set()
 
 
@@ -80,12 +84,17 @@ async def process_full_name(message: types.Message, state: FSMContext):
 
         await bot.send_message(user_id,
                                f"Будем ждать тебя на занятиях!\n"
-                               f"Ты выбрал:\n" + "\n".join(f"✔ {modules[m][0]}" for m in selected_modules))
+                               f"\n" + "\n".join(f"✔ {modules[m][0]}" for m in selected_modules))
         if lessons:
             await bot.send_message(user_id,
                                    "\n\n".join(f"🗓️ {lesson_time} - "
                                                f"{modules[module][0]}" for lesson_time, module in lessons))
-        await bot.send_message(user_id, "Добавлены напоминания о занятиях. ✅")
+        await bot.send_message(user_id, "Ты выбрал(а) крутые модули — уверены, что это хорошее начало чтобы стать лучше и круче!\n"
+                                        "📌 Расписание ты можешь узнать тут - /lessons\n"
+                                        "А я буду присылать тебе напоминания о занятиях, чтобы ты успел(а) подготовиться.\n"
+                                        "💡 Совет: сохрани этот чат в избранное — так точно не потеряешь важные уведомления.\n"
+                                        "📅 До встречи на первой лекции 24 марта в 19.00!\n"
+                                        "Точка сбора Музей “Россия - моя история” (ул. Народной Воли 49)")
 
 
 @dp.callback_query_handler(lambda c: c.data.startswith("remind_"))
@@ -127,7 +136,11 @@ async def start(message: types.Message):
     for key, name in directions.items():
         keyboard.add(InlineKeyboardButton(name, callback_data=f"dir_{key}_{name}"))
 
-    await message.answer("Добро пожаловать в Академию!\nКакое направление вы выбрали?", reply_markup=keyboard)
+    await message.answer("🎯 Уже часть команды UMVC? Жми на своё направление!\n"
+                         "🌟 Только узнал о нас? Смело нажимай «Я гость» и вливайся в движение!\n\n"
+                         "P.S. Следи за обновлениями в наших социальных сетях:\n"
+                         "тг-канал https://t.me/+d_NKkgLy1BUxODJi\n"
+                         "вк сообщество https://m.vk.com/umvcrew?from=groups", reply_markup=keyboard)
 
 @dp.callback_query_handler(lambda c: c.data == "reset_account")
 async def reset_account(callback_query: types.CallbackQuery):
@@ -157,6 +170,17 @@ async def choose_modules(callback_query: types.CallbackQuery):
     # Сохраняем направление пользователя в БД
     await replace_user(user_id, user_tg_username, direction_key)
 
+    await bot.send_message(callback_query.from_user.id, "Что такое модули?\n"
+                                                        "Это «кирпичики» твоего обучения — короткие курсы по разным направлениям: от фото и видео до психологии и первой помощи.\n"
+                                                        "✅ Каждый модуль — это практика с экспертом,\n"
+                                                        "✅ Готовые навыки для реальных проектов,\n"
+                                                        "✅ Возможность попробовать себя в новом деле!\n\n\n"
+                                                        "Как собрать свой набор?\n"
+                                                        "1️⃣ Минимум 3 модуля — чтобы погрузиться в несколько тем.\n"
+                                                        "2️⃣ Максимум не ограничен— чем больше выберешь, тем круче прокачаешься!\n"
+                                                        "3️⃣ Обязательные модули — если ты член волонтерской команды, они уже будут добавлены в твой список"
+                           )
+
     modules_list = await get_modules_description()
     for module in modules_list:
         await bot.send_message(callback_query.from_user.id, module)
@@ -185,9 +209,9 @@ async def choose_modules(callback_query: types.CallbackQuery):
 
     await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
     await bot.send_message(callback_query.from_user.id,
-                           f"Вы выбрали 🚦 {direction_name} 🚦\n\n"
+                           f"Вы выбрали {direction_name}\n\n"
                            f"Отлично, выбери один или несколько модулей.\n"
-                           f"Обязательные модули: {', '.join(required_modules_names)}",
+                           f"Обязательные модули для твоего направления: {', '.join(required_modules_names)}",
                            reply_markup=keyboard)
 
 
@@ -394,8 +418,8 @@ async def get_lesson_schedule_message(message: types.Message):
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    loop.create_task(reminder_loop())
-    loop.create_task(update_reminders())
-    loop.create_task(update_data_in_google_sheet())
-    loop.create_task(sync_module_dates())
+    # loop.create_task(reminder_loop())
+    # loop.create_task(update_reminders())
+    # loop.create_task(update_data_in_google_sheet())
+    # loop.create_task(sync_module_dates())
     executor.start_polling(dp, skip_updates=True)
