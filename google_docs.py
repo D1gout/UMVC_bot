@@ -19,6 +19,13 @@ def get_sheets_service():
     )
     return build('sheets', 'v4', credentials=credentials)
 
+async def get_column_letter(index):
+    """Преобразует индекс в буквенное представление (A-Z, AA, AB...)"""
+    result = ""
+    while index >= 0:
+        result = string.ascii_uppercase[index % 26] + result
+        index = index // 26 - 1
+    return result
 
 async def merge_cells(start_row, end_row, start_column, end_column):
     service = get_sheets_service()
@@ -118,7 +125,7 @@ async def delete_column(time):
     title_letter = None
     if values[0][column_index] != '':
         title = values[0][column_index]
-        title_letter = string.ascii_uppercase[column_index]
+        title_letter = get_column_letter(column_index)
 
     requests = [
         {
@@ -224,7 +231,7 @@ def find_and_update_in_google_sheet(user_id, answer, date_to_find, range_to_upda
     if row_index is None or column_index is None:
         return False
 
-    column_letter = string.ascii_uppercase[column_index]
+    column_letter = get_column_letter(column_index)
 
     update_range = f"Отметки!{column_letter}{row_index}"
 
@@ -299,7 +306,7 @@ async def add_missing_dates_to_sheet(module_name, new_dates, len_existing_dates,
 
         body = {"values": [[modules[module_name][0]]]}
 
-        update_range = f"Отметки!{string.ascii_uppercase[insert_index]}1"
+        update_range = f"Отметки!{get_column_letter(insert_index)}1"
 
         service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
@@ -308,8 +315,8 @@ async def add_missing_dates_to_sheet(module_name, new_dates, len_existing_dates,
             body=body
         ).execute()
 
-    column_letter = string.ascii_uppercase[insert_index]
-    column_letter_last = string.ascii_uppercase[insert_index + len(new_dates) - 1]
+    column_letter = get_column_letter(insert_index)
+    column_letter_last = get_column_letter(insert_index + len(new_dates) - 1)
 
     await auto_merger(0, 1, insert_index, insert_index + len(new_dates))
 
