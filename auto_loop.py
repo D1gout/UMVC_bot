@@ -33,11 +33,21 @@ async def update_data_in_google_sheet():
         for i in range(len(user_data)):
             if user_data[i][5] == 0:
                 table_num = await cmd_user_google_sheet([user_data[i][0]], f"B")
-                await cmd_user_google_sheet([user_data[i][1]], f"C{table_num}")
-                await cmd_user_google_sheet([f'https://t.me/{user_data[i][2]}'], f"D{table_num}")
-                await cmd_user_google_sheet([directions[user_data[i][3]]], f"E{table_num}")
-                await cmd_user_google_sheet([", ".join([modules[module][0] for module in user_data[i][4].split(",")])], f"F{table_num}")
+                if table_num:
+                    if user_data[i][1]:
+                        await cmd_user_google_sheet([user_data[i][1]], f"C{table_num}")
 
-                await print_user(user_data[i][0])
+                    if user_data[i][2]:
+                        await cmd_user_google_sheet([f'https://t.me/{user_data[i][2]}'], f"D{table_num}")
+
+                    if user_data[i][3] and user_data[i][3] in directions:
+                        await cmd_user_google_sheet([directions[user_data[i][3]]], f"E{table_num}")
+
+                    if user_data[i][4]:
+                        modules_list = [modules[module][0] for module in user_data[i][4].split(",") if module in modules]
+                        if modules_list:
+                            await cmd_user_google_sheet([", ".join(modules_list)], f"F{table_num}")
+
+                    await print_user(user_data[i][0])
 
         await asyncio.sleep(60 * 60)
