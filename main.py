@@ -245,7 +245,7 @@ async def show_modules(callback_query: types.CallbackQuery):
 async def select_module(callback_query: types.CallbackQuery):
     """Добавление/удаление модуля"""
     user_id = callback_query.from_user.id
-    module_key = callback_query.data.split("_")[1]
+    module_key = callback_query.data.split("_", 1)[1]
 
     # Проверяем, выбрал ли пользователь направление
     user_info = await select_user(user_id)
@@ -336,6 +336,17 @@ async def handle_delete_lesson(callback_query: types.CallbackQuery):
         reply_markup=keyboard
     )
 
+@dp.callback_query_handler(lambda c: c.data == "read_modules")
+async def read_modules_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+
+    if user_id in user_messages:
+        for msg_id in user_messages[user_id]:
+            await bot.delete_message(user_id, msg_id)
+        del user_messages[user_id]
+
+    await bot.answer_callback_query(callback_query.id)
+
 
 @dp.message_handler(commands=['admin'])
 async def admin_command(message: types.Message):
@@ -348,6 +359,26 @@ async def admin_command(message: types.Message):
         await update_role(user_id, "admin")
 
     await bot.delete_message(message.from_user.id, message.message_id)
+
+
+
+@dp.message_handler(commands=['module_info'])
+async def module_info_command(message: types.Message):
+    user_id = message.from_user.id
+
+    modules_list = await get_modules_description()
+    user_messages[user_id] = []  # Очищаем перед новым списком
+
+    for i, module in enumerate(modules_list):
+        if i == len(modules_list) - 1:  # Для последнего модуля добавляем кнопку
+            keyboard = InlineKeyboardMarkup().add(
+                InlineKeyboardButton("✅ Прочитано", callback_data="read_modules")
+            )
+            msg = await bot.send_message(user_id, module, reply_markup=keyboard)
+        else:
+            msg = await bot.send_message(user_id, module)
+
+        user_messages[user_id].append(msg.message_id)
 
 
 @dp.message_handler(commands=['lesson'])
@@ -406,7 +437,7 @@ async def add_module_command(message: types.Message):
     if await get_role(user_id) != 'admin':
         return await bot.delete_message(message.from_user.id, message.message_id)
 
-    params = message.text.split(" ")
+    params = message.text.split(" ", 2)
 
     if len(params) != 3:
         await message.reply("Неверный формат. Используйте: /module <module_code> <module_name>")
