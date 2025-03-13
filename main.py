@@ -142,6 +142,7 @@ async def start(message: types.Message):
                          "тг-канал https://t.me/+d_NKkgLy1BUxODJi\n"
                          "вк сообщество https://m.vk.com/umvcrew?from=groups", reply_markup=keyboard)
 
+
 @dp.callback_query_handler(lambda c: c.data == "reset_account")
 async def reset_account(callback_query: types.CallbackQuery):
     """Пересоздание аккаунта"""
@@ -170,22 +171,36 @@ async def choose_modules(callback_query: types.CallbackQuery):
     # Сохраняем направление пользователя в БД
     await replace_user(user_id, user_tg_username, direction_key)
 
-    await bot.send_message(callback_query.from_user.id, "Что такое модули?\n"
-                                                        "Это «кирпичики» твоего обучения — короткие курсы по разным направлениям: от фото и видео до психологии и первой помощи.\n"
-                                                        "✅ Каждый модуль — это практика с экспертом,\n"
-                                                        "✅ Готовые навыки для реальных проектов,\n"
-                                                        "✅ Возможность попробовать себя в новом деле!\n\n\n"
-                                                        "Как собрать свой набор?\n"
-                                                        "1️⃣ Минимум 3 модуля — чтобы погрузиться в несколько тем.\n"
-                                                        "2️⃣ Максимум не ограничен— чем больше выберешь, тем круче прокачаешься!\n"
-                                                        "3️⃣ Обязательные модули — если ты член волонтерской команды, они уже будут добавлены в твой список"
-                           )
+    # Отправляем первое сообщение с объяснением
+    keyboard = InlineKeyboardMarkup().add(InlineKeyboardButton("➡️ Продолжить", callback_data=f"continue_{direction_key}_{direction_name}"))
+    await bot.send_message(
+        user_id,
+        "Что такое модули?\n"
+        "Это «кирпичики» твоего обучения — короткие курсы по разным направлениям: от фото и видео до психологии и первой помощи.\n"
+        "✅ Каждый модуль — это практика с экспертом,\n"
+        "✅ Готовые навыки для реальных проектов,\n"
+        "✅ Возможность попробовать себя в новом деле!\n\n\n"
+        "Как собрать свой набор?\n"
+        "1️⃣ Минимум 3 модуля — чтобы погрузиться в несколько тем.\n"
+        "2️⃣ Максимум не ограничен — чем больше выберешь, тем круче прокачаешься!\n"
+        "3️⃣ Обязательные модули — если ты член волонтерской команды, они уже будут добавлены в твой список",
+        reply_markup=keyboard
+    )
+
+@dp.callback_query_handler(lambda c: c.data.startswith("continue_"))
+async def show_modules(callback_query: types.CallbackQuery):
+    """Отображение списка модулей после нажатия на кнопку 'Продолжить'"""
+    user_id = callback_query.from_user.id
+    _, direction_key, direction_name = callback_query.data.split("_")
+
+    await bot.delete_message(user_id, callback_query.message.message_id)
 
     modules_list = await get_modules_description()
     for module in modules_list:
-        await bot.send_message(callback_query.from_user.id, module)
+        await bot.send_message(user_id, module)
 
     modules = await get_modules_from_db()
+
     # Фильтруем доступные модули
     available_modules = [
         (key, name) for key, (name, restrictions) in modules.items()
@@ -207,8 +222,7 @@ async def choose_modules(callback_query: types.CallbackQuery):
 
     keyboard.add(InlineKeyboardButton("➕ Завершить выбор", callback_data="finish"))
 
-    await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
-    await bot.send_message(callback_query.from_user.id,
+    await bot.send_message(user_id,
                            f"Вы выбрали {direction_name}\n\n"
                            f"Отлично, выбери один или несколько модулей.\n"
                            f"Обязательные модули для твоего направления: {', '.join(required_modules_names)}",
