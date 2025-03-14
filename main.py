@@ -76,9 +76,13 @@ async def finish_selection(callback_query: types.CallbackQuery):
 async def process_full_name(message: types.Message, state: FSMContext):
     """Обработка ввода ФИО пользователя"""
     user_id = message.from_user.id
-    full_name = message.text
+    full_name = message.text.strip()
 
-    await add_user_name(message.from_user.id, full_name)
+    if len(full_name.split()) < 3:
+        await message.answer("Пожалуйста, введите ФИО полностью")
+        return
+
+    await add_user_name(user_id, full_name)
 
     await state.finish()
     await message.answer(f"Спасибо, {full_name}! Регистрация завершена.")
@@ -104,6 +108,7 @@ async def process_full_name(message: types.Message, state: FSMContext):
                                         "💡 Совет: сохрани этот чат в избранное — так точно не потеряешь важные уведомления.\n"
                                         "📅 До встречи на первой лекции 24 марта в 19.00!\n"
                                         "Точка сбора Музей “Россия - моя история” (ул. Народной Воли 49)")
+
 
 
 @dp.callback_query_handler(lambda c: c.data.startswith("remind_"))

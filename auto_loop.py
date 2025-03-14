@@ -24,6 +24,7 @@ async def reminder_loop():
         await asyncio.sleep(60)
 
 async def update_data_in_google_sheet():
+    from main import bot
     """Добавление пользователя в Google-таблицу"""
     while True:
         user_data = await get_users()
@@ -34,8 +35,13 @@ async def update_data_in_google_sheet():
             if user_data[i][5] == 0:
                 table_num = await cmd_user_google_sheet([user_data[i][0]], f"B")
                 if table_num:
+                    if not user_data[i][1]:
+                        await bot.send_message(user_data[i][0], "Вы не ввели ФИО.\nПересоздайте аккаунт! - /start")
+                        continue  # Пропускаем запись, так как данные неполные
+
                     if user_data[i][1]:
                         await cmd_user_google_sheet([user_data[i][1]], f"C{table_num}")
+
 
                     if user_data[i][2]:
                         await cmd_user_google_sheet([f'https://t.me/{user_data[i][2]}'], f"D{table_num}")
