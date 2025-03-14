@@ -36,8 +36,11 @@ async def update_data_in_google_sheet():
                 table_num = await cmd_user_google_sheet([user_data[i][0]], f"B")
                 if table_num:
                     if not user_data[i][1]:
-                        await bot.send_message(user_data[i][0], "Вы не ввели ФИО.\nПересоздайте аккаунт! - /start")
-                        continue  # Пропускаем запись, так как данные неполные
+                        try:
+                            await bot.send_message(user_data[i][0], "Вы не ввели ФИО.\nПересоздайте аккаунт! - /start")
+                        except Exception as e:
+                            print(e)
+                        continue
 
                     if user_data[i][1]:
                         await cmd_user_google_sheet([user_data[i][1]], f"C{table_num}")
