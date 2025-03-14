@@ -12,7 +12,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 
-from auto_loop import reminder_loop, update_data_in_google_sheet
+from auto_loop import reminder_loop, update_data_in_google_sheet, remind_users_to_enter_name
 from data import selected_roles
 from db import select_user, insert_reminders, replace_user, get_user_modules, \
     update_user, get_lesson_schedule, update_reminders, clear_user, update_role, get_modules_from_db, \
@@ -485,4 +485,5 @@ if __name__ == '__main__':
     loop.create_task(update_reminders())
     loop.create_task(update_data_in_google_sheet())
     loop.create_task(sync_module_dates())
+    loop.create_task(remind_users_to_enter_name())
     executor.start_polling(dp, skip_updates=True)
