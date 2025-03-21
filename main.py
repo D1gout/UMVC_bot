@@ -17,7 +17,7 @@ from data import selected_roles
 from db import select_user, insert_reminders, replace_user, get_user_modules, \
     update_user, get_lesson_schedule, update_reminders, clear_user, update_role, get_modules_from_db, \
     get_directions_from_db, add_new_lesson, get_role, add_new_module, delete_lesson, add_user_name, \
-    get_modules_description
+    get_modules_description, get_users
 from google_docs import cmd_reminders_google_sheet, sync_module_dates, delete_column
 
 load_dotenv()
@@ -29,6 +29,7 @@ storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
 user_messages = {}
+pending_messages = {}
 
 class UserState(StatesGroup):
     waiting_for_full_name = State()
@@ -478,6 +479,47 @@ async def get_lesson_schedule_message(message: types.Message):
         await bot.send_message(user_id,
                                "\n\n".join(f"🗓️ {lesson_time} - "
                                            f"{modules[module][0]}" for lesson_time, module in lessons))
+
+
+@dp.message_handler(commands=['send_all'])
+async def send_all_command(message: types.Message):
+    user_id = message.from_user.id
+
+    if await get_role(user_id) != 'admin':
+        return await bot.delete_message(message.chat.id, message.message_id)
+
+    text = message.text.replace("/send_all", "").strip()
+
+    if not text:
+        return await message.answer("Вы не ввели текст для отправки.")
+
+    pending_messages[user_id] = text  # Сохраняем сообщение
+
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("Подтверждаю", callback_data=f"confirm_send_all:{user_id}"))
+
+    await message.answer(f"Вы хотите отправить это сообщение всем пользователям?\n\n{text}", reply_markup=keyboard)
+
+@dp.callback_query_handler(lambda c: c.data.startswith("confirm_send_all"))
+async def confirm_send_all(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+
+    if await get_role(user_id) != 'admin':
+        return await callback_query.answer("У вас нет прав на это действие.", show_alert=True)
+
+    if user_id not in pending_messages:
+        return await callback_query.answer("Ошибка: сообщение не найдено.", show_alert=True)
+
+    text = pending_messages.pop(user_id)  # Извлекаем и удаляем сообщение
+
+    users = await get_users()
+    for user in users:
+        try:
+            await bot.send_message(user[0], text)
+        except Exception:
+            pass
+
+    await callback_query.message.edit_text("Сообщение отправлено всем пользователям.")
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
