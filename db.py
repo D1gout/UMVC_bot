@@ -77,7 +77,7 @@ async def print_user(user_id):
 
 
 async def select_reminders(now):
-    cursor.execute("SELECT id, user_id, text FROM reminders WHERE time == ?", (now,))
+    cursor.execute("SELECT id, user_id, text FROM reminders WHERE time <= ?", (now,))
     return cursor.fetchall()
 
 async def delete_reminder(reminder_id):
