@@ -276,4 +276,4 @@ async def update_reminders():
 
             await remove_duplicates()
 
-        await asyncio.sleep(60 * 10)  # Запуск каждые 10 минут
+        await asyncio.sleep(60 * 30)  # Запуск каждые 30 минут
