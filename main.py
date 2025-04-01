@@ -118,14 +118,18 @@ async def handle_reminder_response(callback_query: types.CallbackQuery):
     user_id = callback_query.data.split("_")[2]
     remind_time = callback_query.data.split("_")[3]
 
-    if remind_status == "come":
-        await cmd_reminders_google_sheet(user_id, f"Да", remind_time, "A:Z")
-        await bot.send_message(callback_query.from_user.id, "Отлично! Ждём тебя на занятии. 🎉")
-    elif remind_status == "skip":
-        await cmd_reminders_google_sheet(user_id, f"Нет", remind_time, "A:Z")
-        await bot.send_message(callback_query.from_user.id, "Жаль! Надеемся увидеть тебя в следующий раз.")
+    try:
+        if remind_status == "come":
+            await cmd_reminders_google_sheet(user_id, f"Да", remind_time, "A:Z")
+            await bot.send_message(callback_query.from_user.id, "Отлично! Ждём тебя на занятии. 🎉")
 
-    await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
+        elif remind_status == "skip":
+            await cmd_reminders_google_sheet(user_id, f"Нет", remind_time, "A:Z")
+            await bot.send_message(callback_query.from_user.id, "Жаль! Надеемся увидеть тебя в следующий раз.")
+
+        await bot.delete_message(callback_query.from_user.id, callback_query.message.message_id)
+    except Exception as e:
+        print(f"Ошибка при отправке пользователю {user_id}: {e}")
 
 
 @dp.message_handler(commands=['start'])
