@@ -2,7 +2,6 @@
 import asyncio
 import sqlite3
 from datetime import timedelta, datetime
-from email.policy import default
 
 import aiosqlite
 
@@ -77,7 +76,7 @@ async def print_user(user_id):
 
 
 async def select_reminders(now):
-    cursor.execute("SELECT id, user_id, text FROM reminders WHERE time <= ?", (now,))
+    cursor.execute("SELECT id, user_id, text FROM reminders WHERE time = ?", (now,))
     return cursor.fetchall()
 
 async def delete_reminder(reminder_id):
