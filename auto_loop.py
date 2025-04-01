@@ -17,9 +17,13 @@ async def reminder_loop():
         reminders_to_send = await select_reminders(now)
 
         for reminder_id, user_id, text in reminders_to_send:
-            await bot.send_message(user_id, f"🔔 Напоминание: {text}",
-                                   reply_markup=reminder_buttons(user_id, one_hour_now))
-            await delete_reminder(reminder_id)
+            try:
+                await bot.send_message(user_id, f"🔔 Напоминание: {text}",
+                                       reply_markup=reminder_buttons(user_id, one_hour_now))
+                await delete_reminder(reminder_id)
+            except Exception as e:
+                print(f"Ошибка при отправке пользователю {user_id}: {e}")
+
 
         await asyncio.sleep(60)
 
