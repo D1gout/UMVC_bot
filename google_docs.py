@@ -228,7 +228,7 @@ def find_and_update_in_google_sheet(user_id, answer, date_to_find, range_to_upda
             column_index = i
             break
 
-    if row_index is None or column_index is None:
+    if row_index is None or row_index == 2 or column_index is None:
         return False
 
     column_letter = get_column_letter(column_index)

@@ -233,13 +233,14 @@ async def delete_lesson(lesson_time):
 
 async def update_reminders():
     while True:
-        async with (aiosqlite.connect("umvc.db") as db):
-            # Получаем актуальное расписание занятий
+        async with aiosqlite.connect("umvc.db") as db:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            cursor = await db.execute("SELECT module_name, lesson_time FROM lesson_schedule WHERE lesson_time > ?",
-                             (current_time,))
 
-            lessons = await cursor.fetchall()  # Получаем все строки
+            # Получаем актуальное расписание занятий
+            cursor = await db.execute("SELECT module_name, lesson_time FROM lesson_schedule WHERE lesson_time > ?", (current_time,))
+            lessons = await cursor.fetchall()
+            modules = await get_modules_from_db()
+            lesson_set = {(module, lesson_time) for module, lesson_time in lessons}
 
             # Получаем всех пользователей, у которых есть напоминания
             cursor = await db.execute("SELECT user_id FROM user_data WHERE modules IS NOT NULL AND modules != ''")
@@ -253,7 +254,6 @@ async def update_reminders():
                     continue
 
                 selected_modules = user_data[0].split(",")  # Список модулей пользователя
-                modules = await get_modules_from_db()
 
                 # Обновляем напоминания для каждого модуля пользователя
                 for module, lesson_time in lessons:
@@ -274,5 +274,24 @@ async def update_reminders():
                             await insert_reminders(user_id, reminder_lesson_time, reminder_text)
 
             await remove_duplicates()
+
+            # Удаление устаревших напоминаний
+            cursor = await db.execute("SELECT user_id, text, time FROM reminders")
+            reminders = await cursor.fetchall()
+
+            module_name_map = {data[0]: key for key, data in modules.items()}
+
+            for user_id, reminder_text, reminder_time in reminders:
+                module_name = reminder_text.split(" ")[1] + ' ' + reminder_text.split(" ")[2]  # Второе слово в тексте — название модуля
+                lesson_time = (datetime.strptime(reminder_time, "%Y-%m-%d %H:%M") + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+
+                module_name_key = module_name_map.get(module_name)
+                if not module_name_key:
+                    continue  # Если не нашли, пропускаем
+
+                if (module_name_key, lesson_time) not in lesson_set:
+                    await db.execute("DELETE FROM reminders WHERE user_id = ? AND text = ? AND time = ?", (user_id, reminder_text, reminder_time))
+
+            await db.commit()
 
         await asyncio.sleep(60 * 30)  # Запуск каждые 30 минут
