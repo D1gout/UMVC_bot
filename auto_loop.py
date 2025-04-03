@@ -12,7 +12,7 @@ async def reminder_loop():
     """Фоновая задача для отправки напоминаний"""
     while True:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        one_hour_now = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+        one_hour_now = (datetime.now() + timedelta(hours=4)).strftime("%Y-%m-%d %H:%M")
 
         reminders_to_send = await select_reminders(now)
 
