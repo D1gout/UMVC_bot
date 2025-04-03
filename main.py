@@ -92,7 +92,7 @@ async def process_full_name(message: types.Message, state: FSMContext):
 
     if modules and selected_modules:
         for lesson_time, module in lessons:
-            lesson_dt = datetime.strptime(lesson_time, "%Y-%m-%d %H:%M") - timedelta(hours=1)
+            lesson_dt = datetime.strptime(lesson_time, "%Y-%m-%d %H:%M") - timedelta(hours=5)
             await insert_reminders(user_id, lesson_dt.strftime("%Y-%m-%d %H:%M"),
                                    f"🗓️ {modules[module][0]} в {lesson_dt.strftime('%H:%M')}")
 

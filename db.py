@@ -259,7 +259,7 @@ async def update_reminders():
                 for module, lesson_time in lessons:
                     if module in selected_modules:
                         reminder_lesson_time = (datetime.strptime(lesson_time, "%Y-%m-%d %H:%M"
-                                                                  ) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+                                                                  ) - timedelta(hours=5)).strftime("%Y-%m-%d %H:%M")
 
                         reminder_text = f"🗓️ {modules[module][0]} в {lesson_time[11:16]}"
 
@@ -283,7 +283,7 @@ async def update_reminders():
 
             for user_id, reminder_text, reminder_time in reminders:
                 module_name = reminder_text.split(" ")[1] + ' ' + reminder_text.split(" ")[2]  # Второе слово в тексте — название модуля
-                lesson_time = (datetime.strptime(reminder_time, "%Y-%m-%d %H:%M") + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+                lesson_time = (datetime.strptime(reminder_time, "%Y-%m-%d %H:%M") + timedelta(hours=5)).strftime("%Y-%m-%d %H:%M")
 
                 module_name_key = module_name_map.get(module_name)
                 if not module_name_key:
